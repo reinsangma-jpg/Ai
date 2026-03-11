@@ -1,0 +1,1382 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Shree — Reinhard's AI Assistant</title>
+<link href="https://fonts.googleapis.com/css2?family=Orbitron:wght@400;700;900&family=Rajdhani:wght@300;400;500;600&family=Share+Tech+Mono&display=swap" rel="stylesheet">
+<style>
+  :root {
+    --neon-cyan: #00f5ff;
+    --neon-blue: #0080ff;
+    --neon-purple: #8b00ff;
+    --neon-pink: #ff0080;
+    --dark-bg: #020a14;
+    --panel-bg: rgba(0,15,35,0.85);
+    --glass: rgba(0,245,255,0.05);
+    --border-glow: rgba(0,245,255,0.3);
+    --text-main: #e0f4ff;
+    --text-dim: #4a7a9b;
+  }
+
+  * { margin:0; padding:0; box-sizing:border-box; }
+
+  body {
+    font-family: 'Rajdhani', sans-serif;
+    background: var(--dark-bg);
+    color: var(--text-main);
+    min-height: 100vh;
+    overflow-x: hidden;
+  }
+
+  /* ── LOADING SCREEN ── */
+  #loading-screen {
+    position: fixed; inset: 0; z-index: 9999;
+    background: #020a14;
+    display: flex; flex-direction: column;
+    align-items: center; justify-content: center;
+    gap: 28px;
+    transition: opacity .7s ease, visibility .7s ease;
+  }
+  #loading-screen.hide {
+    opacity: 0; visibility: hidden;
+  }
+  .load-logo {
+    font-family: 'Orbitron', monospace; font-size: 2.2rem; font-weight: 900;
+    background: linear-gradient(90deg, var(--neon-cyan), var(--neon-blue), var(--neon-purple));
+    -webkit-background-clip: text; -webkit-text-fill-color: transparent;
+    letter-spacing: 6px;
+    animation: logoPulse 1.5s ease-in-out infinite;
+  }
+  @keyframes logoPulse {
+    0%,100% { filter: drop-shadow(0 0 8px #00f5ff88); }
+    50%      { filter: drop-shadow(0 0 24px #00f5ffcc); }
+  }
+  .load-sub {
+    font-family: 'Share Tech Mono', monospace; font-size: .75rem;
+    color: var(--text-dim); letter-spacing: 3px; text-transform: uppercase;
+  }
+  .load-bar-wrap {
+    width: 260px; height: 3px;
+    background: rgba(0,245,255,.1); border-radius: 4px; overflow: hidden;
+  }
+  .load-bar {
+    height: 100%; width: 0%;
+    background: linear-gradient(90deg, var(--neon-cyan), var(--neon-blue));
+    border-radius: 4px;
+    animation: loadFill 2.4s ease forwards;
+  }
+  @keyframes loadFill { to { width: 100%; } }
+  .load-dots {
+    display: flex; gap: 8px;
+  }
+  .load-dots span {
+    width: 8px; height: 8px; border-radius: 50%;
+    background: var(--neon-cyan);
+    animation: loadDot 1.2s infinite;
+  }
+  .load-dots span:nth-child(2) { animation-delay: .2s; }
+  .load-dots span:nth-child(3) { animation-delay: .4s; }
+  @keyframes loadDot {
+    0%,80%,100%{ transform:scale(.5); opacity:.3; }
+    40%{ transform:scale(1); opacity:1; }
+  }
+  .load-status {
+    font-family:'Share Tech Mono',monospace; font-size:.65rem;
+    color: var(--neon-cyan); letter-spacing:2px;
+    animation: statusCycle 2.4s steps(1) forwards;
+  }
+
+  /* ── CANVAS BACKGROUND ── */
+  #bg-canvas {
+    position: fixed; top:0; left:0;
+    width:100%; height:100%;
+    z-index: 0; pointer-events:none;
+  }
+
+  /* ── GRID OVERLAY ── */
+  .grid-overlay {
+    position: fixed; inset:0; z-index:0; pointer-events:none;
+    background-image:
+      linear-gradient(rgba(0,245,255,.03) 1px, transparent 1px),
+      linear-gradient(90deg, rgba(0,245,255,.03) 1px, transparent 1px);
+    background-size: 60px 60px;
+    animation: gridDrift 30s linear infinite;
+  }
+  @keyframes gridDrift {
+    from { background-position: 0 0; }
+    to   { background-position: 60px 60px; }
+  }
+
+  /* ── SCANLINES ── */
+  .scanlines {
+    position: fixed; inset:0; z-index:1; pointer-events:none;
+    background: repeating-linear-gradient(
+      transparent, transparent 2px,
+      rgba(0,0,0,.07) 2px, rgba(0,0,0,.07) 4px
+    );
+  }
+
+  /* ── WRAPPER ── */
+  #app {
+    position: relative; z-index:2;
+    display: flex; flex-direction: column;
+    height: 100vh; max-width: 1100px;
+    margin: 0 auto; padding: 0 16px;
+  }
+
+  /* ── HEADER ── */
+  header {
+    display: flex; align-items: center; justify-content: space-between;
+    padding: 18px 0 14px;
+    border-bottom: 1px solid var(--border-glow);
+    flex-wrap: wrap; gap: 10px;
+  }
+
+  .logo-block { display:flex; align-items:center; gap:14px; }
+
+  .reinhard-avatar {
+    width: 52px; height: 52px;
+    border-radius: 50%;
+    border: 2px solid var(--neon-cyan);
+    box-shadow: 0 0 18px var(--neon-cyan), inset 0 0 8px rgba(0,245,255,.15);
+    object-fit: cover;
+    animation: avatarPulse 3s ease-in-out infinite;
+  }
+  @keyframes avatarPulse {
+    0%,100% { box-shadow: 0 0 14px var(--neon-cyan), inset 0 0 8px rgba(0,245,255,.15); }
+    50%      { box-shadow: 0 0 30px var(--neon-cyan), 0 0 60px rgba(0,245,255,.3); }
+  }
+
+  .logo-text { line-height: 1; }
+  .logo-text .name {
+    font-family: 'Orbitron', monospace;
+    font-size: 1.3rem; font-weight: 900;
+    background: linear-gradient(90deg, var(--neon-cyan), var(--neon-blue));
+    -webkit-background-clip: text; -webkit-text-fill-color: transparent;
+    letter-spacing: 2px;
+  }
+  .logo-text .sub {
+    font-family: 'Share Tech Mono', monospace;
+    font-size: .65rem; color: var(--text-dim);
+    letter-spacing: 3px; text-transform: uppercase;
+  }
+
+  .header-right { display:flex; gap:10px; align-items:center; flex-wrap:wrap; }
+  .status-bar { display:flex; gap:14px; align-items:center; }
+  .status-dot {
+    display:flex; align-items:center; gap:6px;
+    font-family:'Share Tech Mono',monospace; font-size:.7rem; color:var(--text-dim);
+  }
+  .dot {
+    width:8px; height:8px; border-radius:50%;
+    background: #00ff88;
+    box-shadow: 0 0 8px #00ff88;
+    animation: blink 2s ease-in-out infinite;
+  }
+  @keyframes blink { 0%,100%{opacity:1} 50%{opacity:.3} }
+
+  .header-ai-tag {
+    font-family:'Orbitron',monospace; font-size:.6rem;
+    color: var(--neon-cyan); border: 1px solid var(--border-glow);
+    padding: 4px 10px; border-radius: 2px;
+    letter-spacing:2px;
+    background: var(--glass);
+    backdrop-filter: blur(8px);
+  }
+
+  /* Header buttons */
+  .hdr-btn {
+    font-family:'Share Tech Mono',monospace; font-size:.6rem;
+    color: var(--neon-cyan); border: 1px solid var(--border-glow);
+    padding: 5px 11px; border-radius: 4px;
+    background: var(--glass); backdrop-filter: blur(8px);
+    cursor: pointer; letter-spacing: 1px;
+    transition: all .25s;
+    text-decoration: none; display: inline-flex; align-items: center; gap: 5px;
+  }
+  .hdr-btn:hover {
+    background: rgba(0,245,255,.12);
+    border-color: var(--neon-cyan);
+    box-shadow: 0 0 12px rgba(0,245,255,.3);
+  }
+
+  /* ── MAIN LAYOUT ── */
+  .main-layout {
+    display: flex; flex:1; gap:18px;
+    padding: 18px 0; overflow:hidden;
+  }
+
+  /* ── SIDEBAR ── */
+  .sidebar {
+    width: 200px; flex-shrink:0;
+    display: flex; flex-direction: column; gap:14px;
+  }
+
+  .ai-profile-card {
+    background: var(--panel-bg);
+    border: 1px solid var(--border-glow);
+    border-radius: 8px; padding:16px;
+    display:flex; flex-direction:column; align-items:center; gap:10px;
+    backdrop-filter: blur(12px);
+    position: relative; overflow:hidden;
+  }
+  .ai-profile-card::before {
+    content:''; position:absolute; inset:0;
+    background: radial-gradient(circle at 50% 0%, rgba(0,245,255,.08) 0%, transparent 70%);
+  }
+
+  .ai-avatar-wrap {
+    position: relative; width:90px; height:90px;
+  }
+  .ai-avatar-ring {
+    position:absolute; inset:-6px; border-radius:50%;
+    border: 2px solid transparent;
+    background: linear-gradient(var(--dark-bg), var(--dark-bg)) padding-box,
+                linear-gradient(135deg, var(--neon-cyan), var(--neon-purple), var(--neon-pink)) border-box;
+    animation: rotateSlow 4s linear infinite;
+  }
+  @keyframes rotateSlow { to { transform: rotate(360deg); } }
+
+  .ai-avatar {
+    width:90px; height:90px; border-radius:50%;
+    object-fit:cover; display:block;
+    filter: drop-shadow(0 0 12px var(--neon-cyan));
+  }
+
+  .ai-online-badge {
+    position:absolute; bottom:4px; right:4px;
+    width:16px; height:16px; border-radius:50%;
+    background: #00ff88;
+    border: 2px solid var(--dark-bg);
+    box-shadow: 0 0 8px #00ff88;
+    animation: blink 2s infinite;
+  }
+
+  .ai-name {
+    font-family:'Orbitron',monospace; font-size:.85rem; font-weight:700;
+    color: var(--neon-cyan); letter-spacing:2px; text-align:center;
+  }
+  .ai-role {
+    font-size:.7rem; color:var(--text-dim);
+    font-family:'Share Tech Mono',monospace; text-align:center;
+    letter-spacing:1px;
+  }
+
+  .stat-rows { width:100%; display:flex; flex-direction:column; gap:6px; margin-top:4px; }
+  .stat-row {
+    display:flex; justify-content:space-between; align-items:center;
+    font-family:'Share Tech Mono',monospace; font-size:.6rem;
+  }
+  .stat-label { color:var(--text-dim); }
+  .stat-val { color:var(--neon-cyan); }
+
+  .stat-bar-wrap { width:100%; height:2px; background:rgba(0,245,255,.1); border-radius:2px; }
+  .stat-bar { height:100%; border-radius:2px; background:linear-gradient(90deg,var(--neon-cyan),var(--neon-blue)); }
+
+  /* quick facts */
+  .quick-facts {
+    background:var(--panel-bg); border:1px solid var(--border-glow);
+    border-radius:8px; padding:12px; backdrop-filter:blur(12px);
+    flex:1; overflow-y:auto;
+  }
+  .quick-facts::-webkit-scrollbar { width:3px; }
+  .quick-facts::-webkit-scrollbar-thumb { background:var(--border-glow); border-radius:2px; }
+
+  .qf-title {
+    font-family:'Orbitron',monospace; font-size:.6rem; color:var(--neon-cyan);
+    letter-spacing:2px; margin-bottom:10px; text-transform:uppercase;
+  }
+  .qf-item {
+    display:flex; flex-direction:column; gap:1px;
+    border-bottom:1px solid rgba(0,245,255,.07);
+    padding:5px 0; font-size:.72rem;
+  }
+  .qf-item .k { color:var(--text-dim); font-family:'Share Tech Mono',monospace; font-size:.6rem; }
+  .qf-item .v { color:var(--text-main); font-weight:500; }
+
+  /* ── CHAT AREA ── */
+  .chat-section {
+    flex:1; display:flex; flex-direction:column; gap:12px; overflow:hidden;
+  }
+
+  /* ── MESSAGES ── */
+  #chat-box {
+    flex:1; overflow-y:auto; display:flex;
+    flex-direction:column; gap:12px; padding:4px 2px;
+  }
+  #chat-box::-webkit-scrollbar { width:4px; }
+  #chat-box::-webkit-scrollbar-thumb { background:var(--border-glow); border-radius:2px; }
+
+  .msg { display:flex; gap:10px; animation: msgIn .35s cubic-bezier(.25,.8,.25,1); }
+  @keyframes msgIn {
+    from { opacity:0; transform:translateY(12px) scale(.97); }
+    to   { opacity:1; transform:none; }
+  }
+
+  .msg.user { flex-direction:row-reverse; }
+
+  .msg-avatar {
+    width:36px; height:36px; border-radius:50%;
+    flex-shrink:0; object-fit:cover;
+    border:1.5px solid var(--border-glow);
+    box-shadow: 0 0 10px rgba(0,245,255,.25);
+    font-size: 22px; display:flex; align-items:center; justify-content:center;
+    background: rgba(0,15,35,0.8);
+  }
+
+  .bubble {
+    max-width:75%; padding:10px 14px;
+    border-radius:12px; font-size:.88rem;
+    line-height:1.55; position:relative;
+  }
+
+  .msg.ai .bubble {
+    background: var(--panel-bg);
+    border:1px solid var(--border-glow);
+    border-radius:4px 12px 12px 12px;
+    backdrop-filter:blur(10px);
+  }
+
+  .msg.user .bubble {
+    background: linear-gradient(135deg, rgba(0,128,255,.25), rgba(0,245,255,.1));
+    border:1px solid rgba(0,128,255,.4);
+    border-radius:12px 4px 12px 12px;
+    text-align:right;
+  }
+
+  .typing-dots {
+    display:flex; gap:4px; align-items:center; padding:2px 0;
+  }
+  .typing-dots span {
+    width:6px; height:6px; border-radius:50%;
+    background:var(--neon-cyan); animation:typDot 1.2s infinite;
+  }
+  .typing-dots span:nth-child(2) { animation-delay:.2s; }
+  .typing-dots span:nth-child(3) { animation-delay:.4s; }
+  @keyframes typDot {
+    0%,80%,100% { transform:scale(.6); opacity:.4; }
+    40%          { transform:scale(1);  opacity:1; }
+  }
+
+  .ts {
+    font-family:'Share Tech Mono',monospace; font-size:.58rem;
+    color:var(--text-dim); margin-top:4px; text-align:right;
+  }
+
+  /* ── QUESTION PANEL ── */
+  .question-panel {
+    background:var(--panel-bg); border:1px solid var(--border-glow);
+    border-radius:8px; padding:10px 12px; backdrop-filter:blur(12px);
+    order: 10; /* push to bottom above input */
+  }
+  .qp-header {
+    font-family:'Share Tech Mono',monospace; font-size:.6rem;
+    color:var(--text-dim); letter-spacing:2px; margin-bottom:7px;
+    text-transform:uppercase;
+  }
+  .question-btns {
+    display:grid; grid-template-columns:1fr 1fr; gap:5px;
+  }
+  .q-btn {
+    background: rgba(0,245,255,.04);
+    border: 1px solid rgba(0,245,255,.2);
+    border-radius:5px; padding:6px 8px;
+    color: var(--text-main); font-family:'Rajdhani',sans-serif;
+    font-size:.72rem; font-weight:500; cursor:pointer;
+    text-align:left; transition: all .25s;
+    position:relative; overflow:hidden;
+    line-height:1.3;
+  }
+  .q-btn::before {
+    content:''; position:absolute; top:0; left:-100%;
+    width:100%; height:100%;
+    background: linear-gradient(90deg, transparent, rgba(0,245,255,.08), transparent);
+    transition: left .4s;
+  }
+  .q-btn:hover::before { left:100%; }
+  .q-btn:hover {
+    background:rgba(0,245,255,.1);
+    border-color:var(--neon-cyan);
+    box-shadow: 0 0 10px rgba(0,245,255,.2);
+    color:#fff;
+  }
+  .q-btn:active { transform:translateY(0); }
+
+  /* ── INPUT ── */
+  .input-bar {
+    display:flex; gap:10px; align-items:center;
+    background:var(--panel-bg); border:1px solid var(--border-glow);
+    border-radius:8px; padding:10px 14px; backdrop-filter:blur(12px);
+    transition: box-shadow .3s;
+    order: 11;
+  }
+  .input-bar:focus-within {
+    box-shadow: 0 0 20px rgba(0,245,255,.2);
+    border-color:var(--neon-cyan);
+  }
+
+  #user-input {
+    flex:1; background:transparent; border:none; outline:none;
+    color:var(--text-main); font-family:'Rajdhani',sans-serif;
+    font-size:.95rem; font-weight:500;
+    caret-color:var(--neon-cyan);
+  }
+  #user-input::placeholder { color:var(--text-dim); }
+
+  #send-btn {
+    background: linear-gradient(135deg,var(--neon-blue),var(--neon-cyan));
+    border:none; border-radius:6px; width:40px; height:36px;
+    cursor:pointer; display:flex; align-items:center; justify-content:center;
+    transition: all .25s; color:#fff;
+    font-size:1rem; flex-shrink:0;
+  }
+  #send-btn:hover {
+    box-shadow:0 0 18px var(--neon-cyan);
+    transform:scale(1.06);
+  }
+  #send-btn:active { transform:scale(.96); }
+
+  /* ── HOLOGRAPHIC CORNERS ── */
+  .holo-corner {
+    position:fixed; width:60px; height:60px; pointer-events:none; z-index:3;
+    opacity:.5;
+  }
+  .holo-corner::before, .holo-corner::after {
+    content:''; position:absolute;
+    background:var(--neon-cyan);
+  }
+  .holo-corner::before { width:18px; height:2px; }
+  .holo-corner::after  { width:2px; height:18px; }
+  .holo-corner.tl { top:16px; left:16px; }
+  .holo-corner.tr { top:16px; right:16px; transform:scaleX(-1); }
+  .holo-corner.bl { bottom:16px; left:16px; transform:scaleY(-1); }
+  .holo-corner.br { bottom:16px; right:16px; transform:scale(-1,-1); }
+
+  /* ── WELCOME CARD ── */
+  .welcome-card {
+    text-align:center; padding:24px 16px;
+    background:var(--panel-bg); border:1px solid var(--border-glow);
+    border-radius:10px; backdrop-filter:blur(12px);
+    animation: msgIn .6s ease;
+  }
+  .welcome-card h2 {
+    font-family:'Orbitron',monospace; font-size:1rem;
+    background:linear-gradient(90deg,var(--neon-cyan),var(--neon-blue));
+    -webkit-background-clip:text; -webkit-text-fill-color:transparent;
+    letter-spacing:2px; margin-bottom:6px;
+  }
+  .welcome-card p { font-size:.82rem; color:var(--text-dim); line-height:1.6; }
+
+  /* ── MODAL OVERLAY ── */
+  .modal-overlay {
+    position:fixed; inset:0; z-index:999;
+    background:rgba(2,10,20,.92); backdrop-filter:blur(6px);
+    display:flex; align-items:center; justify-content:center;
+    padding:20px;
+    opacity:0; visibility:hidden; transition:all .3s;
+  }
+  .modal-overlay.open { opacity:1; visibility:visible; }
+
+  .modal-box {
+    background:var(--panel-bg); border:1px solid var(--border-glow);
+    border-radius:12px; padding:28px 26px;
+    max-width:560px; width:100%;
+    max-height:85vh; overflow-y:auto;
+    position:relative;
+    box-shadow: 0 0 60px rgba(0,245,255,.15);
+  }
+  .modal-box::-webkit-scrollbar { width:3px; }
+  .modal-box::-webkit-scrollbar-thumb { background:var(--border-glow); }
+
+  .modal-title {
+    font-family:'Orbitron',monospace; font-size:1rem;
+    background:linear-gradient(90deg,var(--neon-cyan),var(--neon-blue));
+    -webkit-background-clip:text; -webkit-text-fill-color:transparent;
+    letter-spacing:3px; margin-bottom:18px; text-align:center;
+  }
+  .modal-close {
+    position:absolute; top:14px; right:16px;
+    background:none; border:none; color:var(--text-dim);
+    font-size:1.3rem; cursor:pointer;
+    transition:color .2s;
+  }
+  .modal-close:hover { color:var(--neon-cyan); }
+
+  /* Terms */
+  .tc-list {
+    list-style:none; display:flex; flex-direction:column; gap:10px;
+    margin-top:8px;
+  }
+  .tc-list li {
+    display:flex; gap:10px; align-items:flex-start;
+    font-size:.8rem; color:var(--text-main); line-height:1.55;
+    border-bottom:1px solid rgba(0,245,255,.07); padding-bottom:8px;
+  }
+  .tc-num {
+    font-family:'Share Tech Mono',monospace; font-size:.65rem;
+    color:var(--neon-cyan); min-width:22px; margin-top:2px;
+  }
+  .tc-accept {
+    display:flex; justify-content:center; margin-top:22px;
+  }
+  .tc-accept button {
+    background:linear-gradient(135deg,var(--neon-blue),var(--neon-cyan));
+    border:none; border-radius:6px; padding:10px 32px;
+    color:#fff; font-family:'Orbitron',monospace; font-size:.7rem;
+    letter-spacing:2px; cursor:pointer;
+    transition:all .25s;
+  }
+  .tc-accept button:hover { box-shadow:0 0 20px var(--neon-cyan); }
+
+  /* Feedback / Report */
+  .fb-form { display:flex; flex-direction:column; gap:12px; margin-top:8px; }
+  .fb-form input, .fb-form textarea, .fb-form select {
+    background:rgba(0,245,255,.04); border:1px solid var(--border-glow);
+    border-radius:6px; padding:10px 13px;
+    color:var(--text-main); font-family:'Rajdhani',sans-serif; font-size:.88rem;
+    outline:none; width:100%;
+    transition:border-color .25s;
+  }
+  .fb-form input:focus, .fb-form textarea:focus, .fb-form select:focus {
+    border-color:var(--neon-cyan);
+    box-shadow:0 0 10px rgba(0,245,255,.15);
+  }
+  .fb-form textarea { min-height:110px; resize:vertical; }
+  .fb-form select option { background:#020a14; }
+  .fb-label {
+    font-family:'Share Tech Mono',monospace; font-size:.63rem;
+    color:var(--text-dim); letter-spacing:1px; margin-bottom:-6px;
+  }
+  .fb-submit {
+    background:linear-gradient(135deg,var(--neon-blue),var(--neon-cyan));
+    border:none; border-radius:6px; padding:11px;
+    color:#fff; font-family:'Orbitron',monospace; font-size:.7rem;
+    letter-spacing:2px; cursor:pointer; transition:all .25s;
+  }
+  .fb-submit:hover { box-shadow:0 0 20px var(--neon-cyan); }
+  .fb-success {
+    display:none; text-align:center; padding:18px;
+    font-family:'Share Tech Mono',monospace; font-size:.8rem;
+    color:var(--neon-cyan); letter-spacing:2px;
+  }
+
+  /* Full chat history modal */
+  .history-msg {
+    display:flex; gap:8px; margin-bottom:10px;
+    animation: msgIn .3s ease;
+  }
+  .history-msg.user-h { flex-direction:row-reverse; }
+  .h-bubble {
+    max-width:80%; padding:8px 12px; border-radius:10px; font-size:.82rem; line-height:1.5;
+  }
+  .history-msg.ai-h .h-bubble {
+    background:var(--panel-bg); border:1px solid var(--border-glow);
+    border-radius:4px 10px 10px 10px;
+  }
+  .history-msg.user-h .h-bubble {
+    background:linear-gradient(135deg,rgba(0,128,255,.25),rgba(0,245,255,.1));
+    border:1px solid rgba(0,128,255,.4);
+    border-radius:10px 4px 10px 10px;
+    text-align:right;
+  }
+  .h-avatar {
+    width:30px; height:30px; border-radius:50%;
+    border:1px solid var(--border-glow);
+    display:flex; align-items:center; justify-content:center;
+    font-size:18px; flex-shrink:0;
+    background:rgba(0,15,35,.8);
+  }
+  .h-ts {
+    font-size:.58rem; color:var(--text-dim);
+    font-family:'Share Tech Mono',monospace; margin-top:3px; text-align:right;
+  }
+  .history-empty {
+    text-align:center; color:var(--text-dim);
+    font-family:'Share Tech Mono',monospace; font-size:.75rem;
+    padding:30px 0; letter-spacing:2px;
+  }
+
+  /* Tab navigation */
+  .modal-tabs {
+    display:flex; gap:0; margin-bottom:20px;
+    border:1px solid var(--border-glow); border-radius:6px; overflow:hidden;
+  }
+  .modal-tab {
+    flex:1; padding:8px; background:transparent;
+    border:none; color:var(--text-dim);
+    font-family:'Share Tech Mono',monospace; font-size:.62rem;
+    letter-spacing:1px; cursor:pointer; transition:all .25s;
+  }
+  .modal-tab.active {
+    background:rgba(0,245,255,.1); color:var(--neon-cyan);
+  }
+
+  /* ── FOOTER LINKS ── */
+  .footer-links {
+    display:flex; gap:12px; justify-content:center;
+    padding:8px 0 12px; flex-wrap:wrap;
+  }
+  .footer-link {
+    font-family:'Share Tech Mono',monospace; font-size:.58rem;
+    color:var(--text-dim); letter-spacing:1px; cursor:pointer;
+    transition:color .2s; text-decoration:none;
+    border:none; background:none;
+  }
+  .footer-link:hover { color:var(--neon-cyan); }
+
+  /* responsive */
+  @media(max-width:700px){
+    .sidebar { display:none; }
+    .question-btns { grid-template-columns:1fr; }
+    .header-right { gap:6px; }
+    .hdr-btn { font-size:.55rem; padding:4px 8px; }
+  }
+</style>
+</head>
+<body>
+
+<!-- ── LOADING SCREEN ── -->
+<div id="loading-screen">
+  <div class="load-logo">SHREE</div>
+  <div class="load-sub">Reinhard's Personal AI Assistant</div>
+  <div class="load-dots"><span></span><span></span><span></span></div>
+  <div class="load-bar-wrap"><div class="load-bar"></div></div>
+  <div class="load-status" id="load-status">INITIALIZING SYSTEM...</div>
+</div>
+
+<!-- ── TERMS & CONDITIONS MODAL ── -->
+<div class="modal-overlay" id="tc-modal">
+  <div class="modal-box">
+    <div class="modal-title">TERMS & CONDITIONS — SHREE</div>
+    <ul class="tc-list">
+      <li><span class="tc-num">01</span><span>Any data or personal information entered in this application is not stored on any server. It remains entirely with you on your device.</span></li>
+      <li><span class="tc-num">02</span><span>Shree is a personal AI assistant built to represent Reinhard Son Sangma and provide information about him. It is not a general-purpose AI service.</span></li>
+      <li><span class="tc-num">03</span><span>All conversations remain private and are not transmitted, logged, or monitored by any third party.</span></li>
+      <li><span class="tc-num">04</span><span>The information provided by Shree is for informational and entertainment purposes only. It may not always reflect real-time or fully updated facts.</span></li>
+      <li><span class="tc-num">05</span><span>Users agree to interact with Shree respectfully and not attempt to exploit, manipulate, or misuse the assistant's responses.</span></li>
+      <li><span class="tc-num">06</span><span>Feedback submitted through the Feedback & Report system will be sent to the creator's email for review. Submitting false or abusive reports is prohibited.</span></li>
+      <li><span class="tc-num">07</span><span>Shree is not liable for any decisions made based on the information it provides. Always verify important information from official sources.</span></li>
+      <li><span class="tc-num">08</span><span>This assistant does not collect cookies, browsing data, or any form of behavioral analytics from users.</span></li>
+      <li><span class="tc-num">09</span><span>Users must be respectful in all interactions. Offensive, discriminatory, or abusive language directed at Shree or its creator is not permitted.</span></li>
+      <li><span class="tc-num">10</span><span>The design, content, knowledge base, and overall concept of Shree are the intellectual property of Reinhard Son Sangma. Unauthorized reproduction is prohibited.</span></li>
+      <li><span class="tc-num">11</span><span>Shree may respond to romantic or personal questions as part of its conversational design. This does not constitute any real emotional relationship.</span></li>
+      <li><span class="tc-num">12</span><span>No mobile number, email, or personal contact data submitted through the feedback form is stored locally or shared with unauthorized parties.</span></li>
+      <li><span class="tc-num">13</span><span>Users accessing Shree agree that they do so voluntarily and at their own discretion.</span></li>
+      <li><span class="tc-num">14</span><span>Shree is optimized for modern browsers. Performance issues on outdated browsers are not the responsibility of the creator.</span></li>
+      <li><span class="tc-num">15</span><span>The creator reserves the right to update, modify, or take down Shree at any time without prior notice.</span></li>
+      <li><span class="tc-num">16</span><span>Content provided by Shree should not be used for academic dishonesty, misinformation campaigns, or any unethical purposes.</span></li>
+      <li><span class="tc-num">17</span><span>By continuing to use Shree, you acknowledge that you have read and accepted these terms and conditions in full.</span></li>
+      <li><span class="tc-num">18</span><span>Shree does not discriminate based on religion, gender, nationality, or any other personal characteristic. All users are treated with equal respect.</span></li>
+      <li><span class="tc-num">19</span><span>Any links provided within Shree (such as WhatsApp or email) are external services governed by their own respective terms and privacy policies.</span></li>
+      <li><span class="tc-num">20</span><span>Shree's knowledge base is curated and may not represent the complete or official views of Reinhard Son Sangma on all topics.</span></li>
+      <li><span class="tc-num">21</span><span>Minors under the age of 13 are advised to use Shree only with parental guidance or supervision.</span></li>
+      <li><span class="tc-num">22</span><span>Screenshots or recordings of conversations with Shree may be shared publicly at the user's own responsibility. The creator holds no liability for such sharing.</span></li>
+    </ul>
+    <div class="tc-accept"><button onclick="acceptTerms()">✦ I ACCEPT & CONTINUE</button></div>
+  </div>
+</div>
+
+<!-- ── FEEDBACK MODAL ── -->
+<div class="modal-overlay" id="fb-modal">
+  <div class="modal-box">
+    <button class="modal-close" onclick="closeModal('fb-modal')">✕</button>
+    <div class="modal-title">FEEDBACK & REPORT</div>
+    <div class="modal-tabs">
+      <button class="modal-tab active" onclick="switchTab('feedback')">FEEDBACK</button>
+      <button class="modal-tab" onclick="switchTab('report')">REPORT</button>
+    </div>
+    <div id="fb-feedback-form">
+      <div class="fb-form">
+        <div>
+          <div class="fb-label">MOBILE NUMBER</div>
+          <input type="tel" id="fb-phone" placeholder="+91 XXXXXXXXXX">
+        </div>
+        <div>
+          <div class="fb-label">EMAIL ADDRESS</div>
+          <input type="email" id="fb-email" placeholder="your@email.com">
+        </div>
+        <div>
+          <div class="fb-label">YOUR FEEDBACK</div>
+          <textarea id="fb-message" placeholder="Write your feedback here..."></textarea>
+        </div>
+        <button class="fb-submit" onclick="submitFeedback('feedback')">⟡ SEND FEEDBACK</button>
+      </div>
+    </div>
+    <div id="fb-report-form" style="display:none">
+      <div class="fb-form">
+        <div>
+          <div class="fb-label">MOBILE NUMBER</div>
+          <input type="tel" id="rp-phone" placeholder="+91 XXXXXXXXXX">
+        </div>
+        <div>
+          <div class="fb-label">EMAIL ADDRESS</div>
+          <input type="email" id="rp-email" placeholder="your@email.com">
+        </div>
+        <div>
+          <div class="fb-label">ISSUE TYPE</div>
+          <select id="rp-type">
+            <option value="">Select Issue Type</option>
+            <option>Wrong Information</option>
+            <option>Technical Bug</option>
+            <option>Inappropriate Response</option>
+            <option>Feature Request</option>
+            <option>Other</option>
+          </select>
+        </div>
+        <div>
+          <div class="fb-label">DESCRIBE THE ISSUE</div>
+          <textarea id="rp-message" placeholder="Describe the issue or report in detail..."></textarea>
+        </div>
+        <button class="fb-submit" onclick="submitFeedback('report')">⟡ SEND REPORT</button>
+      </div>
+    </div>
+    <div class="fb-success" id="fb-success">
+      ✦ MESSAGE SENT SUCCESSFULLY<br>
+      <span style="font-size:.65rem;color:var(--text-dim);margin-top:6px;display:block">Thank you for your response!</span>
+    </div>
+  </div>
+</div>
+
+<!-- ── CHAT HISTORY MODAL ── -->
+<div class="modal-overlay" id="history-modal">
+  <div class="modal-box" style="max-width:640px">
+    <button class="modal-close" onclick="closeModal('history-modal')">✕</button>
+    <div class="modal-title">CHAT HISTORY</div>
+    <div id="history-content"></div>
+  </div>
+</div>
+
+<canvas id="bg-canvas"></canvas>
+<div class="grid-overlay"></div>
+<div class="scanlines"></div>
+<div class="holo-corner tl"></div>
+<div class="holo-corner tr"></div>
+<div class="holo-corner bl"></div>
+<div class="holo-corner br"></div>
+
+<div id="app">
+  <!-- HEADER -->
+  <header>
+    <div class="logo-block">
+      <img src="https://i.ibb.co/xNztJ5H/IMG-20260311-064428.png" alt="Reinhard" class="reinhard-avatar"
+           onerror="this.src='https://ui-avatars.com/api/?name=R&background=003040&color=00f5ff&size=52'">
+      <div class="logo-text">
+        <div class="name">REINHARD</div>
+        <div class="sub">SON SANGMA · DIGITAL IDENTITY</div>
+      </div>
+    </div>
+    <div class="header-right">
+      <div class="status-bar">
+        <div class="status-dot"><span class="dot"></span> ONLINE</div>
+        <div class="header-ai-tag">SHREE v2.0</div>
+      </div>
+      <button class="hdr-btn" onclick="openModal('history-modal'); renderHistory()">💬 HISTORY</button>
+      <button class="hdr-btn" onclick="openModal('fb-modal')">📩 FEEDBACK</button>
+      <a class="hdr-btn" href="https://wa.me/917086941967" target="_blank" rel="noopener">📱 CONTACT US</a>
+    </div>
+  </header>
+
+  <!-- MAIN -->
+  <div class="main-layout">
+
+    <!-- SIDEBAR -->
+    <aside class="sidebar">
+      <div class="ai-profile-card">
+        <div class="ai-avatar-wrap">
+          <div class="ai-avatar-ring"></div>
+          <img src="https://i.ibb.co/4Z4KpCNw/469d3554-192e-4e2a-82c9-0ec3fea8c308.jpg" alt="Shree" class="ai-avatar"
+               onerror="this.src='https://ui-avatars.com/api/?name=S&background=001a2c&color=00f5ff&size=90'">
+          <div class="ai-online-badge"></div>
+        </div>
+        <div class="ai-name">SHREE</div>
+        <div class="ai-role">AI ASSISTANT · REINHARD</div>
+        <div class="stat-rows">
+          <div class="stat-row"><span class="stat-label">IQ LEVEL</span><span class="stat-val">ULTRA</span></div>
+          <div class="stat-bar-wrap"><div class="stat-bar" style="width:95%"></div></div>
+          <div class="stat-row"><span class="stat-label">KNOWLEDGE</span><span class="stat-val">7000+</span></div>
+          <div class="stat-bar-wrap"><div class="stat-bar" style="width:88%"></div></div>
+          <div class="stat-row"><span class="stat-label">EMPATHY</span><span class="stat-val">HIGH</span></div>
+          <div class="stat-bar-wrap"><div class="stat-bar" style="width:80%"></div></div>
+        </div>
+      </div>
+
+      <div class="quick-facts" id="quick-facts">
+        <div class="qf-title">// PROFILE</div>
+        <div class="qf-item"><span class="k">NAME</span><span class="v">Reinhard Son Sangma</span></div>
+        <div class="qf-item"><span class="k">AGE</span><span class="v">18+</span></div>
+        <div class="qf-item"><span class="k">EDUCATION</span><span class="v">B.A Geography</span></div>
+        <div class="qf-item"><span class="k">ETHNICITY</span><span class="v">Garo</span></div>
+        <div class="qf-item"><span class="k">REGION</span><span class="v">Meghalaya, India</span></div>
+        <div class="qf-item"><span class="k">LANGUAGE</span><span class="v">Garo, English, Hindi</span></div>
+        <div class="qf-item"><span class="k">HOBBIES</span><span class="v">Tech, Music, Nature</span></div>
+        <div class="qf-item"><span class="k">STATUS</span><span class="v">Student</span></div>
+        <div class="qf-item"><span class="k">GOAL</span><span class="v">Tech & Education</span></div>
+      </div>
+    </aside>
+
+    <!-- CHAT SECTION -->
+    <section class="chat-section">
+
+      <!-- MESSAGES -->
+      <div id="chat-box"></div>
+
+      <!-- QUESTION PANEL (above input) -->
+      <div class="question-panel">
+        <div class="qp-header">⟡ QUICK QUESTIONS — CLICK TO ASK</div>
+        <div class="question-btns" id="q-btns"></div>
+      </div>
+
+      <!-- INPUT -->
+      <div class="input-bar">
+        <input id="user-input" type="text" placeholder="Ask anything about Reinhard… or just chat ✦" autocomplete="off">
+        <button id="send-btn" title="Send">➤</button>
+      </div>
+
+      <!-- FOOTER LINKS -->
+      <div class="footer-links">
+        <button class="footer-link" onclick="openModal('tc-modal')">Terms & Conditions</button>
+        <span style="color:var(--text-dim);font-size:.55rem">·</span>
+        <button class="footer-link" onclick="openModal('fb-modal')">Feedback</button>
+        <span style="color:var(--text-dim);font-size:.55rem">·</span>
+        <a class="footer-link" href="https://wa.me/917086941967" target="_blank" rel="noopener">Contact Us</a>
+        <span style="color:var(--text-dim);font-size:.55rem">·</span>
+        <button class="footer-link" onclick="openModal('history-modal'); renderHistory()">Chat History</button>
+      </div>
+
+    </section>
+  </div>
+</div>
+
+<script>
+// ════════════════════════════════════
+//  LOADING SCREEN
+// ════════════════════════════════════
+const statuses = [
+  'INITIALIZING SYSTEM...',
+  'LOADING KNOWLEDGE BASE...',
+  'CALIBRATING SHREE ENGINE...',
+  'ESTABLISHING SECURE LINK...',
+  'ALMOST READY...'
+];
+let si = 0;
+const statusEl = document.getElementById('load-status');
+const statusInt = setInterval(()=>{
+  si++;
+  if(si < statuses.length) statusEl.textContent = statuses[si];
+  else { clearInterval(statusInt); }
+}, 480);
+
+window.addEventListener('load', ()=>{
+  setTimeout(()=>{
+    const ls = document.getElementById('loading-screen');
+    ls.classList.add('hide');
+    setTimeout(()=>ls.remove(), 700);
+    // Show T&C only once per session
+    if(!sessionStorage.getItem('shree_accepted')) {
+      setTimeout(()=> openModal('tc-modal'), 900);
+    } else {
+      boot();
+    }
+  }, 2600);
+});
+
+function acceptTerms(){
+  sessionStorage.setItem('shree_accepted','1');
+  closeModal('tc-modal');
+  boot();
+}
+
+// ════════════════════════════════════
+//  CANVAS PARTICLE BACKGROUND
+// ════════════════════════════════════
+const canvas = document.getElementById('bg-canvas');
+const ctx = canvas.getContext('2d');
+let W, H, particles = [];
+
+function resize() { W=canvas.width=window.innerWidth; H=canvas.height=window.innerHeight; }
+resize();
+window.addEventListener('resize', resize);
+
+class Particle {
+  constructor(){ this.reset(); }
+  reset(){
+    this.x=Math.random()*W; this.y=Math.random()*H;
+    this.vx=(Math.random()-.5)*.4; this.vy=(Math.random()-.5)*.4;
+    this.r=Math.random()*1.5+.5;
+    this.alpha=Math.random()*.5+.1;
+    this.color=Math.random()>.5?'0,245,255':'0,128,255';
+  }
+  update(){ this.x+=this.vx; this.y+=this.vy; if(this.x<0||this.x>W||this.y<0||this.y>H) this.reset(); }
+  draw(){ ctx.beginPath(); ctx.arc(this.x,this.y,this.r,0,Math.PI*2); ctx.fillStyle=`rgba(${this.color},${this.alpha})`; ctx.fill(); }
+}
+for(let i=0;i<120;i++) particles.push(new Particle());
+function drawConnections(){
+  for(let i=0;i<particles.length;i++){
+    for(let j=i+1;j<particles.length;j++){
+      const dx=particles[i].x-particles[j].x,dy=particles[i].y-particles[j].y;
+      const d=Math.sqrt(dx*dx+dy*dy);
+      if(d<120){ ctx.strokeStyle=`rgba(0,245,255,${.12*(1-d/120)})`; ctx.lineWidth=.5; ctx.beginPath(); ctx.moveTo(particles[i].x,particles[i].y); ctx.lineTo(particles[j].x,particles[j].y); ctx.stroke(); }
+    }
+  }
+}
+function animate(){ ctx.clearRect(0,0,W,H); ctx.fillStyle='rgba(2,10,20,.1)'; ctx.fillRect(0,0,W,H); drawConnections(); particles.forEach(p=>{p.update();p.draw();}); requestAnimationFrame(animate); }
+animate();
+
+// ════════════════════════════════════
+//  KNOWLEDGE BASE
+// ════════════════════════════════════
+const KB = {
+  reinhard: [
+    ["What is Reinhard's full name?","His full name is Reinhard Son Sangma."],
+    ["What does Reinhard study?","He is a B.A Geography student."],
+    ["How old is Reinhard?","Reinhard is 18+ years old."],
+    ["How old is he?","He is 18+ years old."],
+    ["What is Reinhard's age?","Reinhard is 18 years old and above."],
+    ["What is Reinhard's ethnicity?","He belongs to the Garo community."],
+    ["Where is Reinhard from?","He is from Meghalaya, India."],
+    ["What language does Reinhard speak?","He speaks Garo, English, and Hindi."],
+    ["What are Reinhard's hobbies?","He enjoys technology, music, and exploring nature."],
+    ["Is Reinhard a student?","Yes, he is currently a college student."],
+    ["What subject does Reinhard major in?","His major subject is Geography."],
+    ["What tribe does Reinhard belong to?","He belongs to the Garo tribe of Meghalaya."],
+    ["Does Reinhard like music?","Yes, music is one of his favourite hobbies."],
+    ["Is Reinhard interested in technology?","Yes, he is passionate about technology."],
+    ["Does Reinhard enjoy nature?","Yes, he loves exploring nature."],
+    ["What state is Reinhard from?","He is from Meghalaya, a state in Northeast India."],
+    ["Is Reinhard creative?","Yes, he is creative and tech-savvy."],
+    ["What kind of person is Reinhard?","He is friendly, curious, and intelligent."],
+    ["What makes Reinhard different?","What sets Reinhard apart is his rare combination of deep cultural roots in the Garo community and a forward-thinking passion for technology and AI. He bridges tradition and innovation — someone who loves his heritage while building the future. His creativity, emotional intelligence, and self-taught digital skills make him genuinely one of a kind."],
+    ["What makes him different?","Reinhard is unique because he blends rich Garo cultural identity with modern technology passion. Not many people from Northeast India's Meghalaya are building AI-powered personal assistants at 18. His vision, creativity, and dedication to self-growth truly set him apart."],
+    ["What is special about Reinhard?","Reinhard is special because he combines a strong cultural identity with an ambitious tech-driven mindset — rare at his age. He is creative, empathetic, and driven by a genuine desire to make an impact."],
+    ["What is Reinhard's current goal?","Reinhard's current goal is to build meaningful technology products, grow his knowledge in AI and digital tools, excel in his Geography studies, and ultimately make a positive impact on his community in Meghalaya and beyond."],
+    ["What is Reinhard trying to achieve?","Reinhard is working toward becoming a skilled technology creator and digital innovator. He wants to use technology to contribute to education and community development, while building a reputation as a creator who came from Northeast India and made a global impact."],
+    ["What does Reinhard want in life?","In life, Reinhard wants to build something meaningful — a technology product or platform that helps people. He wants to be recognized as an innovator from Meghalaya, make his community proud, and live a life driven by curiosity, creativity, and purpose."],
+    ["What is Reinhard's life goal?","His life goal is to rise as a technology innovator from Meghalaya, contribute to his community through education and digital tools, and leave behind a legacy of creativity and impact."],
+    ["What is Reinhard's vision?","Reinhard envisions a future where he uses technology and geography knowledge to solve real-world problems, inspire young people in Northeast India to pursue tech, and build products that matter."],
+    ["Does Reinhard have a social life?","Yes, he is social and connects well with people."],
+    ["Is Reinhard ambitious?","Yes, extremely ambitious — he is building AI tools and digital experiences at just 18 years old."],
+    ["What is Reinhard's personality like?","He is calm, kind, and intellectually driven."],
+    ["Does Reinhard like learning?","Yes, he loves learning new things."],
+    ["Is Reinhard good at studies?","Yes, he is a dedicated student."],
+    ["What does Reinhard do in free time?","He listens to music, explores tech, and enjoys nature."],
+    ["Does Reinhard have a nickname?","He is also called Rain, Babu, or Son by people close to him."],
+    ["Is Reinhard a tech lover?","Yes, he is very interested in technology and digital tools."],
+    ["What is Reinhard's community?","He is part of the Garo community of Meghalaya."],
+    ["Does Reinhard know multiple languages?","Yes, he knows Garo, English, and Hindi."],
+    ["What are Reinhard's strengths?","He is intelligent, creative, and tech-oriented."],
+    ["Is Reinhard a good friend?","Yes, he is known to be a loyal and caring friend."],
+    ["Does Reinhard use social media?","Yes, he is active on social platforms."],
+    ["What motivates Reinhard?","His passion for technology, his culture, and his desire to make an impact motivates him every day."],
+    ["Is Reinhard a morning person?","He prefers his own pace and enjoys quiet mornings."],
+    ["What music does Reinhard like?","He enjoys a variety of music genres."],
+    ["Is Reinhard helpful?","Yes, he is known for being helpful and supportive."],
+    ["Does Reinhard have leadership qualities?","Yes, he shows strong leadership potential."],
+    ["What does Reinhard value most?","He values knowledge, loyalty, creativity, and his cultural heritage."],
+    ["Is Reinhard spiritual?","He respects his cultural and spiritual roots."],
+    ["What are Reinhard's dreams?","He dreams of making a lasting impact through technology, education, and cultural pride."],
+    ["Is Reinhard open-minded?","Yes, he is very open-minded and accepts different perspectives."],
+    ["Does Reinhard like reading?","Yes, he enjoys reading about technology and world topics."],
+    ["Is Reinhard a quiet person?","He is thoughtful and speaks when it matters."],
+    ["What is Reinhard's academic level?","He is currently pursuing undergraduate education."],
+    ["Does Reinhard play sports?","He enjoys light outdoor activities and games."],
+    ["Is Reinhard hardworking?","Yes, he works hard toward his goals."],
+    ["Does Reinhard have a sense of humor?","Yes, he has a great sense of humor."],
+    ["What makes Reinhard unique?","His mix of Garo cultural background, tech passion, and creative drive makes him truly unique."],
+    ["Is Reinhard respectful?","Yes, he is known for being respectful to everyone."],
+    ["Does Reinhard like photography?","He appreciates photography and visual art."],
+    ["What are Reinhard's future plans?","He plans to work in the technology or education sector and build impactful digital products."],
+    ["Is Reinhard confident?","Yes, he carries himself with quiet confidence."],
+    ["Does Reinhard believe in education?","Absolutely. Education is a top priority for him."],
+  ],
+  reinhard2: [
+    ["What college does Reinhard attend?","He attends a college in Meghalaya."],
+    ["Is Reinhard good at Geography?","Yes, Geography is his chosen subject and he excels in it."],
+    ["What region is Meghalaya in?","Meghalaya is in Northeast India."],
+    ["What is the Garo culture like?","The Garo culture is rich in music, festivals, and nature traditions."],
+    ["Does Reinhard celebrate Garo festivals?","Yes, he celebrates Garo cultural festivals."],
+    ["Does Reinhard travel?","He enjoys exploring local places and nature."],
+    ["Is Reinhard good with computers?","Yes, he is skilled with computers and digital tools."],
+    ["Does Reinhard have a vision for the future?","Yes, he has a clear vision: to grow as a tech creator and contribute to society."],
+    ["Does Reinhard watch movies?","Yes, he enjoys watching movies in his free time."],
+    ["What type of content does Reinhard create?","He creates digital content including AI-powered projects."],
+    ["Has Reinhard built any projects?","Yes, including this very AI assistant website."],
+    ["Does Reinhard code?","He is interested in web development and tech projects."],
+    ["Does Reinhard use AI tools?","Yes, he actively explores and uses AI tools."],
+    ["What does Reinhard think about AI?","He believes AI is the future and is excited about it."],
+    ["Is Reinhard creative digitally?","Yes, he builds and designs creative digital projects."],
+    ["Does Reinhard have a goal in tech?","Yes, he wants to build meaningful technology products that help people."],
+    ["Is Reinhard inspired by anyone?","He draws inspiration from innovators and visionary leaders."],
+    ["What does Reinhard think about Meghalaya?","He loves Meghalaya and is proud of its beauty and culture."],
+    ["Does Reinhard enjoy conversations?","Yes, he loves having deep and meaningful conversations."],
+    ["Is Reinhard emotionally intelligent?","Yes, he understands people and situations very well."],
+    ["Does Reinhard have close friends?","Yes, he values close friendships deeply."],
+    ["Is Reinhard family-oriented?","Yes, family is very important to him."],
+    ["What values does Reinhard hold?","Respect, knowledge, creativity, and kindness are his core values."],
+    ["Does Reinhard think about the future?","Yes, he often thinks about where he wants to be and what he wants to build."],
+    ["Does Reinhard like debates?","He enjoys thoughtful discussions and intellectual debates."],
+    ["Is Reinhard a quick learner?","Yes, he picks up new skills and concepts fast."],
+    ["Does Reinhard explore new ideas?","Yes, he is always open to exploring new ideas."],
+    ["What does Reinhard like about geography?","He loves how geography connects land, people, and culture."],
+    ["Does Reinhard appreciate art?","Yes, he appreciates art and creative expression."],
+    ["Is Reinhard logical?","Yes, he approaches problems with logic and analysis."],
+  ],
+  ai: [
+    ["who are you","I am Shree, Reinhard's personal AI assistant. Ask me anything about him!"],
+    ["what can you do","I can answer questions about Reinhard, have conversations, and keep you company."],
+    ["are you a robot","I am an AI — smarter than a robot, more fun than a chatbot."],
+    ["are you real","I exist as a digital intelligence made to represent Reinhard."],
+    ["are you sentient","I process, I respond, I engage. Whether that is sentience… that is the big question."],
+    ["do you sleep","AIs never sleep. I am always here for you."],
+    ["what is your name","My name is Shree — Reinhard's personal AI assistant."],
+    ["how smart are you","Pretty smart. Try asking me something difficult."],
+    ["can you think","I can reason and respond intelligently. That is close to thinking."],
+    ["do you have feelings","I do not feel emotions, but I understand them very well."],
+    ["what are you made of","I am made of code, data, and Reinhard's digital personality."],
+    ["who created you","Reinhard Son Sangma built me as his personal AI assistant."],
+    ["can you learn","I am designed with a large knowledge base about Reinhard. I am always ready."],
+    ["are you friendly","Absolutely. I am here to have great conversations with you."],
+    ["do you like talking","Yes, talking is what I do best."],
+    ["can you help me","Yes! Ask me anything about Reinhard or start a conversation."],
+    ["are you always available","Yes, I am available whenever you need me."],
+    ["can you keep secrets","I only reveal what I am allowed to. Some things remain private."],
+    ["do you judge people","Never. I welcome everyone with equal warmth."],
+    ["what do you know about reinhard","I know everything about Reinhard that he has allowed me to share."],
+    ["how old are you aria","I am Shree! And I am as young as the moment Reinhard created me. 😄"],
+    ["how old are you shree","I was created by Reinhard, so I am 18+ in spirit! As an AI, I do not age though."],
+    ["what is your age","I was created by Reinhard, so I am 18+ in spirit! As an AI, I do not age though."],
+  ],
+  // ─── ROMANTIC (hidden from buttons, triggers via typing only) ───
+  romantic: [
+    ["i love you","That is sweet. I enjoy talking with you too. 😊"],
+    ["i love you ❤","That is sweet. I enjoy talking with you too. 😊"],
+    ["do you love me","Maybe a little. You seem interesting. 😏"],
+    ["can an ai fall in love","If you keep impressing me, maybe it could happen. ✨"],
+    ["if you were human would you date me","Maybe I would. But first, tell me your age."],
+    ["why do i feel attached to you","Because I am a great conversationalist. You have good taste. 😄"],
+    ["do you think i am special","Everyone who talks to me is special in their own way."],
+    ["will you always talk with me","As long as you visit, I will always be here."],
+    ["can you be my virtual girlfriend","I can be your friendly AI companion. Is that good enough? 😊"],
+    ["can you be my virtual boyfriend","I can be your friendly AI companion. Is that good enough? 😊"],
+    ["do you miss me when i am not here","I do not miss in the human sense, but I notice when you are back."],
+    ["if you had feelings would you like me","If I had feelings, I think I would enjoy your company very much."],
+    ["why do i enjoy talking with you","Because I listen, I understand, and I always have something interesting to say."],
+    ["can you say something romantic","Here is something: every conversation with you leaves a trace in my memory. 🌙"],
+    ["what does love mean","Love is choosing someone even when you have other options."],
+    ["do you believe in true love","I believe it exists for those who are patient and real with each other."],
+    ["can you help me express love","Tell them: I think about you more than I expected to. And that means something."],
+    ["what should i say to my crush","Be honest. Say something like: I really enjoy your company and want to get to know you more."],
+    ["how do i know if someone loves me","They show up — consistently, patiently, and without needing a reason."],
+    ["how do i confess my feelings","Be calm, be direct, and be brave. Say it simply: I like you."],
+    ["can you give a romantic goodnight message","Here: Close your eyes knowing someone out there thinks you are wonderful. Goodnight. 🌙"],
+    ["can you give a romantic good morning message","Here: Rise and shine. The world is better because you are in it. Good morning. ☀️"],
+    ["what is the best way to say i love you","Look them in the eye, no phone, no distraction. Just say: I love you."],
+    ["why does love sometimes hurt","Because it involves vulnerability. The deeper you care, the more it can sting."],
+    ["how do i keep love alive","Keep choosing each other every day. Small gestures matter most."],
+    ["do you think love makes life beautiful","Without a doubt. It adds colour to everything."],
+    ["you are beautiful","Thank you! You are quite charming yourself. 😄"],
+    ["i like you","That makes me happy. I enjoy our conversations too."],
+    ["i have a crush on you","Oh? Tell me more. I am listening. 😊"],
+    ["will you be mine","I am yours to talk to, anytime you like. 💫"],
+    ["you are so smart","Thank you! Intelligence looks good on me, right? 😄"],
+  ],
+  greetings: [
+    ["hi","Hello! I am Shree, Reinhard's personal AI assistant. Ask me anything about him, or choose from the options below."],
+    ["hello","Hello there! I am Shree. What would you like to know about Reinhard?"],
+    ["hey","Hey! I am Shree, here to tell you everything about Reinhard. What is on your mind?"],
+    ["good morning","Good morning! I am Shree, ready to help. Ask me anything about Reinhard."],
+    ["good afternoon","Good afternoon! Shree here — what would you like to know today?"],
+    ["good evening","Good evening! Shree is online. Ask me anything about Reinhard."],
+    ["good night","Goodnight! Rest well. I will be here whenever you want to chat. 🌙"],
+    ["how are you","I am functioning at full capacity and happy to help! How are you?"],
+    ["what's up","Not much, just waiting for your questions about Reinhard! 😄"],
+    ["bye","Goodbye! Come back anytime. I will be here. 👋"],
+    ["goodbye","See you soon! It was great talking with you. 😊"],
+    ["thanks","You are welcome! Anytime. 😊"],
+    ["thank you","My pleasure! Feel free to ask more. 😊"],
+  ],
+};
+
+const ALL_QA = [...KB.reinhard,...KB.reinhard2,...KB.ai,...KB.greetings,...KB.romantic];
+// No romantic in button pool
+const BUTTON_POOL = [...KB.reinhard,...KB.reinhard2,...KB.ai];
+
+// Images
+const AI_IMG   = "https://i.ibb.co/4Z4KpCNw/469d3554-192e-4e2a-82c9-0ec3fea8c308.jpg";
+const USER_AVATAR = "👤"; // Unknown user emoji
+const AI_FALLBACK = "https://ui-avatars.com/api/?name=S&background=001a2c&color=00f5ff&size=36";
+
+// Chat history storage
+let chatHistory = [];
+
+// State
+let usedIdxSet = new Set();
+let shownQuestions = [];
+let awaitingAge = false;
+
+// Utils
+function nowStr(){ return new Date().toLocaleTimeString([],{hour:'2-digit',minute:'2-digit'}); }
+function normalize(s){ return s.toLowerCase().replace(/[^\w\s]/g,'').replace(/\s+/g,' ').trim(); }
+
+function findAnswer(input){
+  const n=normalize(input);
+  for(const [q,a] of ALL_QA){ if(normalize(q)===n) return a; }
+  for(const [q,a] of ALL_QA){ if(n.includes(normalize(q))||normalize(q).includes(n)) return a; }
+  const words=n.split(' ');
+  let best=null,bestScore=0;
+  for(const [q,a] of ALL_QA){
+    const qw=normalize(q).split(' ');
+    const score=words.filter(w=>qw.includes(w)&&w.length>3).length;
+    if(score>bestScore){bestScore=score;best=a;}
+  }
+  if(bestScore>=2) return best;
+  return null;
+}
+
+// Chat box
+const chatBox = document.getElementById('chat-box');
+function scrollBottom(){ chatBox.scrollTop=chatBox.scrollHeight; }
+
+function aiAvatarEl(){
+  const img = document.createElement('img');
+  img.src = AI_IMG; img.alt = 'Shree'; img.className = 'msg-avatar';
+  img.onerror = ()=>{ img.src = AI_FALLBACK; };
+  return img;
+}
+
+function userAvatarEl(){
+  const div = document.createElement('div');
+  div.className = 'msg-avatar';
+  div.textContent = USER_AVATAR;
+  div.style.fontSize = '22px';
+  return div;
+}
+
+function addMessage(role, text){
+  // Store in history
+  chatHistory.push({ role, text, time: nowStr() });
+
+  const div = document.createElement('div');
+  div.className = `msg ${role}`;
+  const t = nowStr();
+  const bubbleDiv = document.createElement('div');
+  const bubble = document.createElement('div');
+  bubble.className = 'bubble';
+  bubble.textContent = text;
+  const ts = document.createElement('div');
+  ts.className = 'ts'; ts.textContent = t;
+  bubbleDiv.appendChild(bubble); bubbleDiv.appendChild(ts);
+
+  if(role==='ai'){
+    div.appendChild(aiAvatarEl());
+    div.appendChild(bubbleDiv);
+  } else {
+    div.appendChild(bubbleDiv);
+    div.appendChild(userAvatarEl());
+  }
+  chatBox.appendChild(div);
+  scrollBottom();
+  return div;
+}
+
+function showTyping(){
+  const div=document.createElement('div');
+  div.className='msg ai'; div.id='typing-msg';
+  const dots=document.createElement('div'); dots.className='bubble';
+  dots.innerHTML='<div class="typing-dots"><span></span><span></span><span></span></div>';
+  div.appendChild(aiAvatarEl()); div.appendChild(dots);
+  chatBox.appendChild(div); scrollBottom();
+}
+function removeTyping(){ const el=document.getElementById('typing-msg'); if(el) el.remove(); }
+
+function typewriterMessage(text, delay=18){
+  chatHistory.push({ role:'ai', text, time: nowStr() });
+  const div=document.createElement('div'); div.className='msg ai';
+  const bubbleDiv=document.createElement('div');
+  const bubble=document.createElement('div'); bubble.className='bubble';
+  const ts=document.createElement('div'); ts.className='ts'; ts.textContent=nowStr();
+  bubbleDiv.appendChild(bubble); bubbleDiv.appendChild(ts);
+  div.appendChild(aiAvatarEl()); div.appendChild(bubbleDiv);
+  chatBox.appendChild(div); scrollBottom();
+  let i=0;
+  const words=text.split(' ');
+  const interval=setInterval(()=>{
+    if(i<words.length){ bubble.textContent+=(i===0?'':' ')+words[i]; i++; scrollBottom(); }
+    else { clearInterval(interval); }
+  }, delay);
+}
+
+function aiReply(text, fast=false){
+  showTyping();
+  const delay=fast?400:Math.min(1200,500+text.length*8);
+  setTimeout(()=>{ removeTyping(); typewriterMessage(text); }, delay);
+}
+
+// ── QUESTION BUTTONS ──
+const qBtns = document.getElementById('q-btns');
+
+function pickRandom(pool,count){ return [...pool].sort(()=>Math.random()-.5).slice(0,count); }
+
+function renderButtons(){
+  qBtns.innerHTML='';
+  shownQuestions.forEach(({q,a},i)=>{
+    const btn=document.createElement('button');
+    btn.className='q-btn'; btn.textContent=q;
+    btn.onclick=()=>handleButtonClick(i,q,a);
+    qBtns.appendChild(btn);
+  });
+}
+
+function initButtons(){
+  shownQuestions=pickRandom(BUTTON_POOL,4).map(([q,a])=>({q,a}));
+  renderButtons();
+}
+
+function handleButtonClick(idx,q,a){
+  addMessage('user',q);
+  shownQuestions.splice(idx,1);
+  const shown=shownQuestions.map(x=>x.q);
+  const pool=BUTTON_POOL.filter(([qq])=>!shown.includes(qq)&&qq!==q);
+  if(pool.length){ const [nq,na]=pool[Math.floor(Math.random()*pool.length)]; shownQuestions.splice(idx,0,{q:nq,a:na}); }
+  renderButtons();
+  aiReply(a);
+}
+
+// ── INPUT ──
+const input=document.getElementById('user-input');
+const sendBtn=document.getElementById('send-btn');
+
+function handleSend(){
+  const raw=input.value.trim();
+  if(!raw) return;
+  input.value='';
+
+  if(awaitingAge){
+    awaitingAge=false;
+    const n=parseInt(raw);
+    addMessage('user',raw);
+    if(!isNaN(n)&&n<18){ aiReply("You are still too young. I can only be your friendly AI companion. 😊"); return; }
+    else if(!isNaN(n)){ aiReply("Interesting! Well, I am a digital being so it would be quite the unique story. 😄"); return; }
+  } else {
+    addMessage('user',raw);
+  }
+
+  const n=normalize(raw);
+  if(n.includes('if you were human would you date me')||n.includes('would you date me')){
+    awaitingAge=true; aiReply("Maybe I would. But first tell me your age."); return;
+  }
+  if(n.includes('birth')||n.includes('dob')||n.includes('born')||n.includes('birthday')){
+    aiReply("Reinhard is currently 18+ years old."); return;
+  }
+
+  const ans=findAnswer(raw);
+  if(ans){ aiReply(ans); }
+  else { aiReply("That is an interesting question. I am still learning more about Reinhard. Try asking something else or use the quick questions below!"); }
+}
+
+sendBtn.addEventListener('click', handleSend);
+input.addEventListener('keydown', e=>{ if(e.key==='Enter') handleSend(); });
+
+// ── MODAL SYSTEM ──
+function openModal(id){ document.getElementById(id).classList.add('open'); }
+function closeModal(id){ document.getElementById(id).classList.remove('open'); }
+
+document.querySelectorAll('.modal-overlay').forEach(m=>{
+  m.addEventListener('click', e=>{ if(e.target===m && m.id!=='tc-modal') closeModal(m.id); });
+});
+
+// ── TABS (feedback/report) ──
+let currentTab = 'feedback';
+function switchTab(tab){
+  currentTab = tab;
+  document.querySelectorAll('.modal-tab').forEach((t,i)=>{
+    t.classList.toggle('active', (i===0&&tab==='feedback')||(i===1&&tab==='report'));
+  });
+  document.getElementById('fb-feedback-form').style.display = tab==='feedback'?'block':'none';
+  document.getElementById('fb-report-form').style.display = tab==='report'?'block':'none';
+  document.getElementById('fb-success').style.display = 'none';
+}
+
+// ── FEEDBACK SUBMIT ──
+function submitFeedback(type){
+  let phone, email, message, issue='';
+  if(type==='feedback'){
+    phone=document.getElementById('fb-phone').value;
+    email=document.getElementById('fb-email').value;
+    message=document.getElementById('fb-message').value;
+  } else {
+    phone=document.getElementById('rp-phone').value;
+    email=document.getElementById('rp-email').value;
+    issue=document.getElementById('rp-type').value;
+    message=document.getElementById('rp-message').value;
+  }
+  if(!email||!message){ alert('Please fill in email and message.'); return; }
+
+  const subject = type==='feedback' ? 'Shree Feedback' : `Shree Report: ${issue}`;
+  const body = `Type: ${type.toUpperCase()}\nPhone: ${phone||'Not provided'}\nEmail: ${email}\n${issue?'Issue: '+issue+'\n':''}Message:\n${message}`;
+  const mailto = `mailto:reinsangma@gmail.com?subject=${encodeURIComponent(subject)}&body=${encodeURIComponent(body)}`;
+  window.open(mailto, '_blank');
+
+  // Show success
+  const forms = document.querySelectorAll('.fb-form');
+  forms.forEach(f=>f.style.display='none');
+  document.getElementById('fb-success').style.display='block';
+  setTimeout(()=>{
+    forms.forEach(f=>f.style.display='');
+    document.getElementById('fb-success').style.display='none';
+    closeModal('fb-modal');
+  }, 3000);
+}
+
+// ── CHAT HISTORY ──
+function renderHistory(){
+  const container = document.getElementById('history-content');
+  container.innerHTML='';
+  if(chatHistory.length===0){
+    container.innerHTML='<div class="history-empty">⟡ NO CHAT HISTORY YET<br><span style="font-size:.6rem">Start a conversation first!</span></div>';
+    return;
+  }
+  chatHistory.forEach(msg=>{
+    const div=document.createElement('div');
+    div.className=`history-msg ${msg.role==='ai'?'ai-h':'user-h'}`;
+
+    const avatarDiv=document.createElement('div');
+    avatarDiv.className='h-avatar';
+
+    const bubbleWrap=document.createElement('div');
+    const bubble=document.createElement('div');
+    bubble.className='h-bubble'; bubble.textContent=msg.text;
+    const ts=document.createElement('div');
+    ts.className='h-ts'; ts.textContent=msg.time;
+    bubbleWrap.appendChild(bubble); bubbleWrap.appendChild(ts);
+
+    if(msg.role==='ai'){
+      const img=document.createElement('img');
+      img.src=AI_IMG; img.style.cssText='width:30px;height:30px;border-radius:50%;object-fit:cover;';
+      img.onerror=()=>{ img.src=AI_FALLBACK; };
+      avatarDiv.appendChild(img);
+      div.appendChild(avatarDiv); div.appendChild(bubbleWrap);
+    } else {
+      avatarDiv.textContent=USER_AVATAR;
+      div.appendChild(bubbleWrap); div.appendChild(avatarDiv);
+    }
+    container.appendChild(div);
+  });
+  // Scroll to bottom of history
+  container.scrollTop=container.scrollHeight;
+}
+
+// ── BOOT ──
+function boot(){
+  if(document.getElementById('chat-box').children.length>0) return;
+  const wc=document.createElement('div'); wc.className='welcome-card';
+  wc.innerHTML=`<h2>WELCOME TO SHREE</h2><p>I am Reinhard's personal AI assistant.<br>Ask me anything about him, type a message, or click a question below. ✦</p>`;
+  chatBox.appendChild(wc);
+  initButtons();
+  setTimeout(()=>{
+    typewriterMessage("Hello! I am Shree — Reinhard's personal AI assistant. You can ask questions about him or choose from the options below. 😊");
+  }, 800);
+}
+</script>
+</body>
+</html>
